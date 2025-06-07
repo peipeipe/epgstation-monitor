@@ -1,0 +1,35 @@
+name: EPGStation Monitor
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Check EPGStation status
+        id: check_status
+        run: |
+          set -e
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://100.106.99.104:8888/)
+          echo "Status: $STATUS"
+          if [ "$STATUS" -ne 200 ]; then
+            echo "fail=true" >> $GITHUB_OUTPUT
+          else
+            echo "fail=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Notify Discord if down
+        if: steps.check_status.outputs.fail == 'true'
+        run: |
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d '{"content": "[EPGStation] サーバーが応答しませんでした: http://100.106.99.104:8888/"}' \
+            ${{ secrets.DISCORD_WEBHOOK_URL }}
